@@ -196,14 +196,5 @@ All signatures are verified at end of run. Tampered logs are detected.
 
 - Python 3.11+
 - [Ollama](https://ollama.com) (optional — for AI chat/brief)
-- macOS / Linux (CustomTkinter for desktop launcher)
+- macOS / Windows / Linux (CustomTkinter for desktop launcher)
 
----
-
-## License
-
-MIT — see [LICENSE](LICENSE)
-
----
-
-*Built for the MAHE Mobility Challenge 2026 · CAN-Guard AI Team*
