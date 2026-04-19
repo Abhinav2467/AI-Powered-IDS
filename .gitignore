@@ -1,0 +1,59 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environment ────────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Security — NEVER commit encryption keys or encrypted stores ────────────────
+ai_crypto.key
+*.enc
+*.key
+
+# ── Trained models (large binary — regenerated on first run) ──────────────────
+edge_model.joblib
+
+# ── Runtime-generated JSON logs (regenerated each run) ───────────────────────
+incidents.json
+alerts.json
+safety_decisions.json
+demo_report.json
+threat_path_events.json
+
+# ── Streamlit cache ────────────────────────────────────────────────────────────
+.streamlit/
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+*.command
+
+# ── IDE / editors ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── OS temp ───────────────────────────────────────────────────────────────────
+Thumbs.db

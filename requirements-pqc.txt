@@ -1,0 +1,7 @@
+# Optional: post-quantum incident signing (liboqs). Install AFTER requirements.txt:
+#   pip install -r requirements.txt
+#   pip install -r requirements-pqc.txt
+#
+# May compile native liboqs on first install — use only if you need ML-DSA / Dilithium in signing.py.
+
+liboqs-python>=0.10.0

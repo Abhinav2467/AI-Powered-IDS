@@ -1,0 +1,23 @@
+{
+  "model_file": "edge_model.joblib",
+  "sklearn_version": "1.8.0",
+  "training_seed": 42,
+  "training_samples": 1000,
+  "feature_columns": [
+    "can_id",
+    "payload_byte_0",
+    "payload_byte_1",
+    "payload_byte_2",
+    "payload_byte_3",
+    "payload_byte_4",
+    "payload_byte_5",
+    "payload_byte_6",
+    "payload_byte_7",
+    "inter_arrival_time",
+    "iat_rolling_mean",
+    "iat_rolling_std"
+  ],
+  "contamination": 0.03,
+  "timestamp_created": "2026-04-18T19:38:57Z",
+  "hash_sha256": "0b90401f6a3724197a73ac779cc5d0c082a13450c700c5653a2af0801ebadda3"
+}
