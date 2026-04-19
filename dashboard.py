@@ -281,416 +281,282 @@ if page == "📊 Analysis Dashboard":
         speed_context_kmh = cg.get("speed_context_kmh", 0.0)
         speed_band_label  = cg.get("speed_band_label", "parked")
 
-    st.divider()
+        st.divider()
 
-    # ── Before / After (neutral panels — same content as desktop Summary, no alert styling) ──
-    st.header("Snapshot")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(
-            '<div class="cg-panel"><h4>Before (no protection)</h4></div>',
-            unsafe_allow_html=True,
-        )
-        st.metric("Brake ECU protection", "NONE")
-        st.metric("Intrusion detection", "NONE")
-        st.metric("Attack success rate", "100%")
-    with col2:
-        st.markdown(
-            '<div class="cg-panel"><h4>After (CAN-Guard AI)</h4></div>',
-            unsafe_allow_html=True,
-        )
-        st.metric("Detection rate", f"{metrics['detection_rate']:.1%}")
-        st.metric("False positive rate", f"{metrics['false_positive_rate']:.1%}")
-        ae_snap = metrics.get("avg_edge_processing_latency_us") or 0
-        ass_snap = metrics.get("avg_simulated_stack_latency_us") or 0
-        st.metric("Avg total path latency", f"{metrics['avg_detection_latency_us']:.1f} μs")
-        st.metric("Avg edge (IF) latency", f"{ae_snap:.1f} μs")
-        st.metric("Avg sim. stack latency", f"{ass_snap:.1f} μs")
-        st.metric("Safe mode activations", safety_summary["safe_mode_activations"])
-        st.metric(
-            "Speed Context",
-            f"{configured_speed} km/h (configured) — {speed_band_label}",
-        )
+        # ── Before / After ──
+        st.header("Snapshot")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown('<div class="cg-panel"><h4>Before (no protection)</h4></div>', unsafe_allow_html=True)
+            st.metric("Brake ECU protection", "NONE")
+            st.metric("Intrusion detection", "NONE")
+            st.metric("Attack success rate", "100%")
+        with col2:
+            st.markdown('<div class="cg-panel"><h4>After (CAN-Guard AI)</h4></div>', unsafe_allow_html=True)
+            st.metric("Detection rate", f"{metrics['detection_rate']:.1%}")
+            st.metric("False positive rate", f"{metrics['false_positive_rate']:.1%}")
+            ae_snap  = metrics.get("avg_edge_processing_latency_us") or 0
+            ass_snap = metrics.get("avg_simulated_stack_latency_us") or 0
+            st.metric("Avg total path latency", f"{metrics['avg_detection_latency_us']:.1f} μs")
+            st.metric("Avg edge (IF) latency",  f"{ae_snap:.1f} μs")
+            st.metric("Avg sim. stack latency", f"{ass_snap:.1f} μs")
+            st.metric("Safe mode activations", safety_summary["safe_mode_activations"])
+            st.metric("Speed Context", f"{configured_speed} km/h (configured) — {speed_band_label}")
 
-    st.divider()
+        st.divider()
 
-    lm1, lm2, lm3 = st.columns(3)
-    lm1.metric("Attacks Detected", int(metrics["true_positives"]))
-    lm2.metric("Safe Mode Triggers", int(safety_summary["safe_mode_activations"]))
-    lm3.metric("Speed Band", str(speed_band_label).upper())
+        lm1, lm2, lm3 = st.columns(3)
+        lm1.metric("Attacks Detected",   int(metrics["true_positives"]))
+        lm2.metric("Safe Mode Triggers", int(safety_summary["safe_mode_activations"]))
+        lm3.metric("Speed Band",         str(speed_band_label).upper())
 
-    st.subheader("Live CAN Frame Monitor")
-    st.caption(
-        "Frame-by-frame view: ML anomaly score and safety action per message (time order). "
-        "Green = allow, yellow = alert, orange/red = block or safe mode."
-    )
-    _rows: list[dict] = []
-    _dec_list = decisions if isinstance(decisions, list) else list(decisions)
-    for i, (_, frame) in enumerate(results.iterrows()):
-        action = (
-            _dec_list[i].action.value
-            if i < len(_dec_list)
-            else "ALLOW"
+        st.subheader("Live CAN Frame Monitor")
+        st.caption(
+            "Frame-by-frame view: ML anomaly score and safety action per message (time order). "
+            "Green = allow, yellow = alert, orange/red = block or safe mode."
         )
-        _band = (
-            str(speed_band_label).upper()
-            if action in ("SAFE_MODE", "BLOCK", "ALERT")
-            else "—"
-        )
-        _rows.append(
-            {
-                "ECU": frame.get("ecu_name", ""),
-                "CAN ID": frame.get("can_id_hex", ""),
+        _rows: list[dict] = []
+        _dec_list = decisions if isinstance(decisions, list) else list(decisions)
+        for i, (_, frame) in enumerate(results.iterrows()):
+            action = _dec_list[i].action.value if i < len(_dec_list) else "ALLOW"
+            _band  = str(speed_band_label).upper() if action in ("SAFE_MODE", "BLOCK", "ALERT") else "—"
+            _rows.append({
+                "ECU":          frame.get("ecu_name", ""),
+                "CAN ID":       frame.get("can_id_hex", ""),
                 "Anomaly score": round(float(frame.get("anomaly_score", 0.0)), 4),
-                "Confidence": f"{float(frame.get('confidence', 0.0)):.0%}",
-                "Action": action,
-                "Speed band": _band,
-            }
-        )
-    df_live = pd.DataFrame(_rows)
-
-    def _color_action(val: str) -> str:
-        if val == "SAFE_MODE":
-            return "background-color: #ff4444; color: white"
-        if val == "BLOCK":
-            return "background-color: #ff8800; color: white"
-        if val == "ALERT":
-            return "background-color: #ffcc00; color: black"
-        if val == "ALLOW":
-            return "background-color: #143d2a; color: #9ae6b4"
-        return "background-color: #1a1a1a; color: #aaaaaa"
-
-    try:
-        _styled = df_live.style.map(_color_action, subset=["Action"])
-    except AttributeError:
-        _styled = df_live.style.applymap(_color_action, subset=["Action"])  # type: ignore[attr-defined]
-
-    st.dataframe(_styled, height=400, use_container_width=True, hide_index=True)
-
-    st.divider()
-
-    st.subheader("Detection metrics")
-    
-    m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
-    m1.metric("Accuracy", f"{metrics['accuracy']:.1%}")
-    m2.metric("Precision", f"{metrics['precision']:.1%}")
-    m3.metric("Recall", f"{metrics['recall']:.1%}")
-    m4.metric("F1 Score", f"{metrics['f1_score']:.1%}")
-    m5.metric("True Positives", metrics['true_positives'])
-    m6.metric("False Positives", metrics['false_positives'])
-    m7.metric("Batch wall time (s)", f"{metrics.get('wall_clock_batch_detection_s', 0):.4f}")
-    
-    st.divider()
-    
-    st.header("Analysis")
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(
-        ["Summary", "Charts", "Incidents", "Path", "Insights"]
-    )
-
-    with tab1:
-        ae = metrics.get("avg_edge_processing_latency_us") or 0
-        ass = metrics.get("avg_simulated_stack_latency_us") or 0
-        overview = (
-            f"BEFORE (no protection)\n"
-            f"  Brake ECU protection: NONE\n"
-            f"  Intrusion detection: NONE\n"
-            f"  Attack success rate: 100%\n\n"
-            f"AFTER (CAN-Guard AI)\n"
-            f"  Detection rate:        {metrics['detection_rate']:.2%}\n"
-            f"  False positive rate:   {metrics['false_positive_rate']:.2%}\n"
-            f"  Accuracy:              {metrics['accuracy']:.2%}\n"
-            f"  Precision / Recall / F1: {metrics['precision']:.2%} / {metrics['recall']:.2%} / {metrics['f1_score']:.2%}\n"
-            f"  Avg total path latency: {metrics['avg_detection_latency_us']:.1f} μs\n"
-            f"  Avg edge (IF) latency:  {ae:.1f} μs\n"
-            f"  Avg sim. stack latency: {ass:.1f} μs\n"
-            f"  Batch wall time:       {metrics.get('wall_clock_batch_detection_s', 0):.4f} s\n\n"
-            f"Safety layer\n"
-            f"  Allowed: {safety_summary['allowed']}  Alerts: {safety_summary['alerts']}  "
-            f"Blocked: {safety_summary['blocked']}\n"
-            f"  Safe mode activations: {safety_summary['safe_mode_activations']}\n\n"
-            f"Mitigation\n"
-            f"  Incidents: {mit_summary['total_incidents']}  Alerts: {mit_summary['total_alerts']}\n"
-            f"  Signing: {mit_summary.get('signing_algorithm', 'n/a')}\n"
-        )
-        overview += format_prevented_threats_summary(mitigation)
-        st.markdown(f'<div class="cg-mono">{html.escape(overview)}</div>', unsafe_allow_html=True)
-
-    with tab2:
-        # IF decision_function: same bin range for both histograms (comparable)
-        rp = results.reset_index(drop=True)
-        normal_scores = rp.loc[rp["is_malicious"] == 0, "anomaly_score"]
-        attack_scores = rp.loc[rp["is_malicious"] == 1, "anomaly_score"]
-        all_s = rp["anomaly_score"].values.astype(float)
-        s_min = float(np.min(all_s))
-        s_max = float(np.max(all_s))
-        if s_max - s_min < 1e-12:
-            s_min -= 0.5
-            s_max += 0.5
-        nbins = 30
-        bin_size = (s_max - s_min) / nbins
-
-        fig = make_subplots(
-            rows=1,
-            cols=2,
-            subplot_titles=(
-                "Ground-truth normal — score distribution",
-                "Ground-truth malicious — score distribution",
-            ),
-        )
-        fig.add_trace(
-            go.Histogram(
-                x=normal_scores,
-                name="Normal",
-                marker_color="#00CC96",
-                opacity=0.75,
-                xbins=dict(start=s_min, end=s_max + 1e-9, size=bin_size),
-                autobinx=False,
-            ),
-            row=1,
-            col=1,
-        )
-        fig.add_trace(
-            go.Histogram(
-                x=attack_scores,
-                name="Malicious",
-                marker_color="#FF4B4B",
-                opacity=0.75,
-                xbins=dict(start=s_min, end=s_max + 1e-9, size=bin_size),
-                autobinx=False,
-            ),
-            row=1,
-            col=2,
-        )
-        _xl = "IF decision_function (↓ more anomalous, ↑ more inlier-like)"
-        fig.update_xaxes(title_text=_xl, row=1, col=1)
-        fig.update_xaxes(title_text=_xl, row=1, col=2)
-        fig.update_layout(height=420, showlegend=True, template="plotly_dark")
-        st.plotly_chart(fig, use_container_width=True)
-
-        fig2 = go.Figure()
-        nm = rp["is_malicious"] == 0
-        mk = rp["is_malicious"] == 1
-        fig2.add_trace(
-            go.Scatter(
-                x=rp.index[nm],
-                y=rp.loc[nm, "anomaly_score"],
-                mode="markers",
-                name="Normal",
-                marker=dict(color="#00CC96", size=4, opacity=0.5),
-            )
-        )
-        fig2.add_trace(
-            go.Scatter(
-                x=rp.index[mk],
-                y=rp.loc[mk, "anomaly_score"],
-                mode="markers",
-                name="Malicious",
-                marker=dict(color="#FF4B4B", size=10, symbol="x"),
-            )
-        )
-        fig2.update_layout(
-            title="Score vs message order",
-            xaxis_title="Message index",
-            yaxis_title="Isolation Forest score",
-            height=420,
-            template="plotly_dark",
-        )
-        st.plotly_chart(fig2, use_container_width=True)
-
-        st.subheader("CAN ID counts")
-        # Same CAN-ID categories for both traces (grouped — not stacked on misaligned x)
-        id_counts_normal = results[results["is_malicious"] == 0]["can_id_hex"].value_counts()
-        id_counts_attack = results[results["is_malicious"] == 1]["can_id_hex"].value_counts()
-        keys = sorted(set(id_counts_normal.index) | set(id_counts_attack.index), key=str)
-
-        fig3 = go.Figure()
-        fig3.add_trace(
-            go.Bar(
-                x=keys,
-                y=[id_counts_normal.get(k, 0) for k in keys],
-                name="Normal subset",
-                marker_color="#00CC96",
-            )
-        )
-        fig3.add_trace(
-            go.Bar(
-                x=keys,
-                y=[id_counts_attack.get(k, 0) for k in keys],
-                name="Malicious subset",
-                marker_color="#FF4B4B",
-            )
-        )
-        fig3.update_layout(
-            title="Message counts by CAN ID (normal vs malicious subsets)",
-            barmode="group",
-            height=420,
-            template="plotly_dark",
-            xaxis_tickangle=-45,
-        )
-        st.plotly_chart(fig3, use_container_width=True)
-
-        st.subheader("Safety decisions")
-        # Safety decision breakdown — colors must match labels (not list order)
-        action_counts: dict[str, int] = {}
-        for d in decisions:
-            action_counts[d.action.value] = action_counts.get(d.action.value, 0) + 1
-
-        color_map = {
-            "allow": "#00CC96",
-            "alert": "#FFD700",
-            "block": "#FF4B4B",
-            "safe_mode": "#FF6B00",
-        }
-        pie_labels = sorted(action_counts.keys(), key=str)
-        pie_vals = [action_counts[k] for k in pie_labels]
-        pie_colors = [color_map.get(str(l).lower(), "#888888") for l in pie_labels]
-
-        fig4 = go.Figure(
-            data=[
-                go.Pie(
-                    labels=pie_labels,
-                    values=pie_vals,
-                    hole=0.4,
-                    marker=dict(colors=pie_colors),
-                )
-            ]
-        )
-        fig4.update_layout(title="Safety Decision Distribution", height=400, template="plotly_dark")
-        st.plotly_chart(fig4, use_container_width=True)
-        
-        # Summary stats
-        col_a, col_b, col_c = st.columns(3)
-        col_a.metric("Messages Allowed", safety_summary["allowed"])
-        col_b.metric("Alerts Raised", safety_summary["alerts"])
-        col_c.metric("Blocked + Safe Mode", safety_summary["blocked"] + safety_summary["safe_mode_activations"])
-
-        st.subheader("Confusion matrix")
-        ztn, zfp, zfn, ztp = (
-            metrics["true_negatives"],
-            metrics["false_positives"],
-            metrics["false_negatives"],
-            metrics["true_positives"],
-        )
-        zmax = max(1, ztn, zfp, zfn, ztp)
-        cm_fig = go.Figure(
-            data=go.Heatmap(
-                z=[[ztn, zfp], [zfn, ztp]],
-                x=["Predicted normal (inlier)", "Predicted anomaly"],
-                y=["Actual normal", "Actual malicious"],
-                text=[[ztn, zfp], [zfn, ztp]],
-                texttemplate="%{text}",
-                colorscale="RdBu_r",
-                zmin=0,
-                zmax=zmax,
-                showscale=False,
-            )
-        )
-        cm_fig.update_layout(height=350, template="plotly_dark")
-        st.plotly_chart(cm_fig, use_container_width=True)
-
-    with tab3:
-        # Incident table
-        st.subheader(f"{mit_summary['total_incidents']} incidents logged")
-        
-        incident_data = []
-        for inc in mitigation.incidents[: config.INCIDENT_TABLE_MAX_ROWS]:
-            incident_data.append({
-                "ID": inc.incident_id,
-                "CAN ID": inc.can_id,
-                "ECU": inc.ecu_name,
-                "Attack Type": inc.attack_type,
-                "Action": inc.action_taken,
-                "Confidence": f"{inc.confidence:.2%}",
-                "Critical": "yes" if inc.is_safety_critical else "",
-                "Algorithm": getattr(inc, "signature_algorithm", "") or mit_summary.get("signing_algorithm", ""),
-                "Signed": "yes" if inc.signature else "no",
+                "Confidence":   f"{float(frame.get('confidence', 0.0)):.0%}",
+                "Action":       action,
+                "Speed band":   _band,
             })
-        
-        st.dataframe(pd.DataFrame(incident_data), use_container_width=True, hide_index=True)
-        
-        st.info(
-            f"Signing: {mit_summary.get('signing_algorithm', 'n/a')} — "
-            f"{mit_summary['total_incidents']} incident reports signed."
-        )
+        df_live = pd.DataFrame(_rows)
 
-    with tab4:
-        st.subheader("Path")
-        st.caption("Threat path sequence (synthetic lateral-movement log).")
-        st.json(threat_logger.to_json_ready())
+        def _color_action(val: str) -> str:
+            if val == "SAFE_MODE": return "background-color: #ff4444; color: white"
+            if val == "BLOCK":     return "background-color: #ff8800; color: white"
+            if val == "ALERT":     return "background-color: #ffcc00; color: black"
+            if val == "ALLOW":     return "background-color: #143d2a; color: #9ae6b4"
+            return "background-color: #1a1a1a; color: #aaaaaa"
 
-    with tab5:
-        st.subheader("Insights")
-        llm = LLMInsightEngine()
-        st.caption(
-            "On-device explanation report (same baseline as the desktop Insights tab). "
-            f"Ollama HTTP API: `{llm.base_url}` (set `OLLAMA_BASE_URL` or `OLLAMA_HOST` if not local)."
-        )
-        rep = build_explanation_report(
-            metrics=metrics,
-            results_df=results,
-            safety_summary=safety_summary,
-            mit_summary=mit_summary,
-            mitigation=mitigation,
-            decisions=decisions,
-        )
-        st.markdown(rep)
+        try:
+            _styled = df_live.style.map(_color_action, subset=["Action"])
+        except AttributeError:
+            _styled = df_live.style.applymap(_color_action, subset=["Action"])  # type: ignore
 
+        st.dataframe(_styled, height=400, use_container_width=True, hide_index=True)
         st.divider()
-        _ollama_ok = llm.is_server_reachable()
-        st.caption(
-            f"Ollama: **{'reachable' if _ollama_ok else 'offline'}** — model `{llm.model_name}` "
-            f"(`OLLAMA_MODEL`). Start the Ollama app or run `ollama serve`, then `ollama pull {llm.model_name}`."
-        )
-        b1, _ = st.columns([1, 3])
-        with b1:
-            if st.button("Generate AI narrative (Ollama)", key="sl_ollama_narrative"):
+
+        st.subheader("Detection metrics")
+        m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
+        m1.metric("Accuracy",         f"{metrics['accuracy']:.1%}")
+        m2.metric("Precision",        f"{metrics['precision']:.1%}")
+        m3.metric("Recall",           f"{metrics['recall']:.1%}")
+        m4.metric("F1 Score",         f"{metrics['f1_score']:.1%}")
+        m5.metric("True Positives",   metrics['true_positives'])
+        m6.metric("False Positives",  metrics['false_positives'])
+        m7.metric("Batch wall time (s)", f"{metrics.get('wall_clock_batch_detection_s', 0):.4f}")
+        st.divider()
+
+        st.header("Analysis")
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["Summary", "Charts", "Incidents", "Path", "Insights"])
+
+        with tab1:
+            ae  = metrics.get("avg_edge_processing_latency_us") or 0
+            ass = metrics.get("avg_simulated_stack_latency_us") or 0
+            overview = (
+                f"BEFORE (no protection)\n"
+                f"  Brake ECU protection: NONE\n"
+                f"  Intrusion detection: NONE\n"
+                f"  Attack success rate: 100%\n\n"
+                f"AFTER (CAN-Guard AI)\n"
+                f"  Detection rate:        {metrics['detection_rate']:.2%}\n"
+                f"  False positive rate:   {metrics['false_positive_rate']:.2%}\n"
+                f"  Accuracy:              {metrics['accuracy']:.2%}\n"
+                f"  Precision / Recall / F1: {metrics['precision']:.2%} / {metrics['recall']:.2%} / {metrics['f1_score']:.2%}\n"
+                f"  Avg total path latency: {metrics['avg_detection_latency_us']:.1f} μs\n"
+                f"  Avg edge (IF) latency:  {ae:.1f} μs\n"
+                f"  Avg sim. stack latency: {ass:.1f} μs\n"
+                f"  Batch wall time:       {metrics.get('wall_clock_batch_detection_s', 0):.4f} s\n\n"
+                f"Safety layer\n"
+                f"  Allowed: {safety_summary['allowed']}  Alerts: {safety_summary['alerts']}  "
+                f"Blocked: {safety_summary['blocked']}\n"
+                f"  Safe mode activations: {safety_summary['safe_mode_activations']}\n\n"
+                f"Mitigation\n"
+                f"  Incidents: {mit_summary['total_incidents']}  Alerts: {mit_summary['total_alerts']}\n"
+                f"  Signing: {mit_summary.get('signing_algorithm', 'n/a')}\n"
+            )
+            overview += format_prevented_threats_summary(mitigation)
+            st.markdown(f'<div class="cg-mono">{html.escape(overview)}</div>', unsafe_allow_html=True)
+
+        with tab2:
+            rp = results.reset_index(drop=True)
+            normal_scores = rp.loc[rp["is_malicious"] == 0, "anomaly_score"]
+            attack_scores = rp.loc[rp["is_malicious"] == 1, "anomaly_score"]
+            all_s  = rp["anomaly_score"].values.astype(float)
+            s_min  = float(np.min(all_s))
+            s_max  = float(np.max(all_s))
+            if s_max - s_min < 1e-12:
+                s_min -= 0.5; s_max += 0.5
+            nbins    = 30
+            bin_size = (s_max - s_min) / nbins
+
+            fig = make_subplots(rows=1, cols=2,
+                subplot_titles=("Ground-truth normal — score distribution",
+                                "Ground-truth malicious — score distribution"))
+            fig.add_trace(go.Histogram(x=normal_scores, name="Normal", marker_color="#00CC96", opacity=0.75,
+                xbins=dict(start=s_min, end=s_max+1e-9, size=bin_size), autobinx=False), row=1, col=1)
+            fig.add_trace(go.Histogram(x=attack_scores, name="Malicious", marker_color="#FF4B4B", opacity=0.75,
+                xbins=dict(start=s_min, end=s_max+1e-9, size=bin_size), autobinx=False), row=1, col=2)
+            _xl = "IF decision_function (↓ more anomalous, ↑ more inlier-like)"
+            fig.update_xaxes(title_text=_xl, row=1, col=1)
+            fig.update_xaxes(title_text=_xl, row=1, col=2)
+            fig.update_layout(height=420, showlegend=True, template="plotly_dark")
+            st.plotly_chart(fig, use_container_width=True)
+
+            fig2 = go.Figure()
+            nm = rp["is_malicious"] == 0
+            mk = rp["is_malicious"] == 1
+            fig2.add_trace(go.Scatter(x=rp.index[nm], y=rp.loc[nm, "anomaly_score"], mode="markers",
+                name="Normal", marker=dict(color="#00CC96", size=4, opacity=0.5)))
+            fig2.add_trace(go.Scatter(x=rp.index[mk], y=rp.loc[mk, "anomaly_score"], mode="markers",
+                name="Malicious", marker=dict(color="#FF4B4B", size=10, symbol="x")))
+            fig2.update_layout(title="Score vs message order", xaxis_title="Message index",
+                yaxis_title="Isolation Forest score", height=420, template="plotly_dark")
+            st.plotly_chart(fig2, use_container_width=True)
+
+            st.subheader("CAN ID counts")
+            id_counts_normal = results[results["is_malicious"]==0]["can_id_hex"].value_counts()
+            id_counts_attack = results[results["is_malicious"]==1]["can_id_hex"].value_counts()
+            keys = sorted(set(id_counts_normal.index) | set(id_counts_attack.index), key=str)
+            fig3 = go.Figure()
+            fig3.add_trace(go.Bar(x=keys, y=[id_counts_normal.get(k,0) for k in keys],
+                name="Normal subset", marker_color="#00CC96"))
+            fig3.add_trace(go.Bar(x=keys, y=[id_counts_attack.get(k,0) for k in keys],
+                name="Malicious subset", marker_color="#FF4B4B"))
+            fig3.update_layout(title="Message counts by CAN ID", barmode="group",
+                height=420, template="plotly_dark", xaxis_tickangle=-45)
+            st.plotly_chart(fig3, use_container_width=True)
+
+            st.subheader("Safety decisions")
+            action_counts: dict[str, int] = {}
+            for d in decisions:
+                action_counts[d.action.value] = action_counts.get(d.action.value, 0) + 1
+            color_map = {"allow":"#00CC96","alert":"#FFD700","block":"#FF4B4B","safe_mode":"#FF6B00"}
+            pie_labels = sorted(action_counts.keys(), key=str)
+            pie_vals   = [action_counts[k] for k in pie_labels]
+            pie_colors = [color_map.get(str(l).lower(), "#888888") for l in pie_labels]
+            fig4 = go.Figure(data=[go.Pie(labels=pie_labels, values=pie_vals, hole=0.4,
+                marker=dict(colors=pie_colors))])
+            fig4.update_layout(title="Safety Decision Distribution", height=400, template="plotly_dark")
+            st.plotly_chart(fig4, use_container_width=True)
+            col_a, col_b, col_c = st.columns(3)
+            col_a.metric("Messages Allowed", safety_summary["allowed"])
+            col_b.metric("Alerts Raised",    safety_summary["alerts"])
+            col_c.metric("Blocked + Safe Mode", safety_summary["blocked"]+safety_summary["safe_mode_activations"])
+
+            st.subheader("Confusion matrix")
+            ztn,zfp,zfn,ztp = (metrics["true_negatives"],metrics["false_positives"],
+                               metrics["false_negatives"],metrics["true_positives"])
+            zmax = max(1,ztn,zfp,zfn,ztp)
+            cm_fig = go.Figure(data=go.Heatmap(
+                z=[[ztn,zfp],[zfn,ztp]],
+                x=["Predicted normal","Predicted anomaly"],
+                y=["Actual normal","Actual malicious"],
+                text=[[ztn,zfp],[zfn,ztp]], texttemplate="%{text}",
+                colorscale="RdBu_r", zmin=0, zmax=zmax, showscale=False))
+            cm_fig.update_layout(height=350, template="plotly_dark")
+            st.plotly_chart(cm_fig, use_container_width=True)
+
+        with tab3:
+            st.subheader(f"{mit_summary['total_incidents']} incidents logged")
+            incident_data = []
+            for inc in mitigation.incidents[:config.INCIDENT_TABLE_MAX_ROWS]:
+                incident_data.append({
+                    "ID": inc.incident_id, "CAN ID": inc.can_id, "ECU": inc.ecu_name,
+                    "Attack Type": inc.attack_type, "Action": inc.action_taken,
+                    "Confidence": f"{inc.confidence:.2%}",
+                    "Critical": "yes" if inc.is_safety_critical else "",
+                    "Algorithm": getattr(inc,"signature_algorithm","") or mit_summary.get("signing_algorithm",""),
+                    "Signed": "yes" if inc.signature else "no",
+                })
+            st.dataframe(pd.DataFrame(incident_data), use_container_width=True, hide_index=True)
+            st.info(f"Signing: {mit_summary.get('signing_algorithm','n/a')} — "
+                    f"{mit_summary['total_incidents']} incident reports signed.")
+
+        with tab4:
+            st.subheader("Path")
+            st.caption("Threat path sequence (synthetic lateral-movement log).")
+            st.json(threat_logger.to_json_ready())
+
+        with tab5:
+            st.subheader("Insights")
+            llm = LLMInsightEngine()
+            st.caption(
+                "On-device explanation report. "
+                f"Ollama HTTP API: `{llm.base_url}`."
+            )
+            rep = build_explanation_report(
+                metrics=metrics, results_df=results,
+                safety_summary=safety_summary, mit_summary=mit_summary,
+                mitigation=mitigation, decisions=decisions,
+            )
+            st.markdown(rep)
+            st.divider()
+            _ollama_ok = llm.is_server_reachable()
+            st.caption(f"Ollama: **{'reachable' if _ollama_ok else 'offline'}** — model `{llm.model_name}`.")
+            b1, _ = st.columns([1, 3])
+            with b1:
+                if st.button("Generate AI narrative (Ollama)", key="sl_ollama_narrative"):
+                    st.subheader("Ollama narrative")
+                    with st.chat_message("assistant"):
+                        streamed = st.write_stream(llm.stream_insight(metrics, safety_summary, mit_summary))
+                    st.session_state.sl_ai_insight = streamed
+            if st.session_state.get("sl_ai_insight") and not st.session_state.get("_insight_just_shown"):
                 st.subheader("Ollama narrative")
+                st.markdown(st.session_state.sl_ai_insight)
+
+            st.divider()
+            st.subheader("Assistant (Ollama)")
+            if "sl_chat_messages" not in st.session_state:
+                st.session_state.sl_chat_messages = []
+            for msg in st.session_state.sl_chat_messages:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+            _chat_q = st.chat_input("Ask about this run…")
+            if _chat_q:
+                st.session_state.sl_chat_messages.append({"role": "user", "content": _chat_q})
+                with st.chat_message("user"):
+                    st.markdown(_chat_q)
                 with st.chat_message("assistant"):
-                    streamed = st.write_stream(llm.stream_insight(metrics, safety_summary, mit_summary))
-                st.session_state.sl_ai_insight = streamed
-        if st.session_state.get("sl_ai_insight") and not st.session_state.get("_insight_just_shown"):
-            st.subheader("Ollama narrative")
-            st.markdown(st.session_state.sl_ai_insight)
+                    _streamed = st.write_stream(
+                        llm.stream_chat(metrics, safety_summary, mit_summary, _chat_q)
+                    )
+                st.session_state.sl_chat_messages.append({"role": "assistant", "content": _streamed})
+                st.rerun()
 
-        st.divider()
-        st.subheader("Assistant (Ollama)")
-        if "sl_chat_messages" not in st.session_state:
-            st.session_state.sl_chat_messages = []
-        for msg in st.session_state.sl_chat_messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-        _chat_q = st.chat_input("Ask about this run…")
-        if _chat_q:
-            st.session_state.sl_chat_messages.append({"role": "user", "content": _chat_q})
-            with st.chat_message("user"):
-                st.markdown(_chat_q)
-            with st.chat_message("assistant"):
-                _streamed = st.write_stream(
-                    llm.stream_chat(metrics, safety_summary, mit_summary, _chat_q)
-                )
-            st.session_state.sl_chat_messages.append({"role": "assistant", "content": _streamed})
-            st.rerun()
+            st.divider()
+            st.subheader("Quick prompts")
+            qcols = st.columns(2)
+            for i, (short, full) in enumerate(CHAT_SUGGESTIONS):
+                with qcols[i % 2]:
+                    if st.button(short, key=f"sl_qp_{i}", use_container_width=True):
+                        st.session_state.sl_prompt = full
+            st.text_area("Full prompt", height=180, key="sl_prompt")
 
-        st.divider()
-        st.subheader("Quick prompts")
-        st.caption(
-            "Same suggested questions as the desktop Assistant. "
-            "Pick one to load the full prompt for copy/paste, or type in the assistant above."
-        )
-        qcols = st.columns(2)
-        for i, (short, full) in enumerate(CHAT_SUGGESTIONS):
-            with qcols[i % 2]:
-                if st.button(short, key=f"sl_qp_{i}", use_container_width=True):
-                    st.session_state.sl_prompt = full
-        st.text_area(
-            "Full prompt",
-            height=180,
-            key="sl_prompt",
-            help="Updates when you tap a quick prompt above.",
-        )
+    else:
+        # No run yet — idle splash
+        st.info("ℹ️ Configure options in the sidebar and press **▶ Run protection demo** to start.")
+        st.subheader("What happens in one run")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown("**1. Story**")
+            st.write("Traffic starts at the screen, moves through the gateway, and can reach safety systems such as brakes.")
+        with c2:
+            st.markdown("**2. Detection**")
+            st.write("On-device AI scores each frame; suspicious patterns are flagged in batch order.")
+        with c3:
+            st.markdown("**3. Response**")
+            st.write("Safety rules choose allow, alert, block, or safe mode; events are logged and signed.")
 
-# ────────────────────────────────────────────────────────────────────────
-# LIVE ATTACK SIMULATION PAGE
 # ────────────────────────────────────────────────────────────────────────
 elif page == "🎯 Live Attack Simulation":
     import time as _time
